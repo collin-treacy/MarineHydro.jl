@@ -244,7 +244,7 @@ function vertices(e::ReflectedElement{StaticElement})
 end
 
 ############################ Differentiable Mesh #####################################
-function axisymmetric_mesh(profile::Meshes.Rope, n_theta::Integer=72)
+function axisymmetric_simplemesh(profile::Meshes.Rope, n_theta::Integer=72)
     @assert n_theta >= 3 "n_theta must be at least 3"
     @assert length(profile.vertices) >= 2 "profile must contain at least two points"
 
@@ -311,6 +311,14 @@ function axisymmetric_mesh(profile::Meshes.Rope, n_theta::Integer=72)
     end
 
     return Meshes.SimpleMesh(points, connec)
+end
+
+function axisymmetric_profile(
+    r_vals::Vector = [1.0, 1.0, 1.0],
+    z_vals::Vector = [1e-3, -0.5, -1.0]
+)
+    points = [Meshes.Point(r, z) for (r, z) in zip(r_vals, z_vals)]
+    return Meshes.Rope(points)
 end
 
 function wavebot_profile(
@@ -432,7 +440,7 @@ function plot_mesh(mesh::Meshes.SimpleMesh, profile)
     ax = Makie.Axis(
         fig[1, 1];
         aspect=Makie.DataAspect(),
-        title="WaveBot Profile",
+        title="Profile",
         xlabel="r [m]",
         ylabel="z [m]",
         limits=((0, nothing), (nothing, 1e-6)),
@@ -445,7 +453,7 @@ function plot_mesh(mesh::Meshes.SimpleMesh, profile)
         aspect=:data,
         azimuth=π / 8,
         elevation=π / 8,
-        title="WaveBot Mesh",
+        title="Mesh",
         xlabel="x [m]",
         ylabel="y [m]",
         zlabel="z [m]",
@@ -455,7 +463,7 @@ function plot_mesh(mesh::Meshes.SimpleMesh, profile)
     display(fig)
 end
 
-function wavebot_mesh(r1,r2,d1,d2,n_points = (5, 10, 5),n_theta = 72)
+function wavebot_mesh(r1,r2,d1,d2,n_points = (5, 10, 5),n_theta = 72, show_plot=false)
 
     # geometric design variables
     cylinder_height=d1
@@ -468,12 +476,30 @@ function wavebot_mesh(r1,r2,d1,d2,n_points = (5, 10, 5),n_theta = 72)
     # n_theta = 72
 
     profile = wavebot_profile(cylinder_height, frustum_height, top_radius, bottom_radius; n_points=n_points)
-    mesh = axisymmetric_mesh(profile, n_theta)
+    mesh = axisymmetric_simplemesh(profile, n_theta)
     MHmesh = Mesh(mesh)
 
-    # if show_plot
-    #     plot_mesh(mesh, profile)
-    # end
+    if show_plot
+        plot_mesh(mesh, profile)
+    end
+        
+    return MHmesh
+end
+
+function axisymmetric_mesh(
+        r_vals::Vector = [1.0, 1.0, 1.0],
+        z_vals::Vector = [1e-3, -0.5, -1.0],
+        n_theta = 72,
+        show_plot=false
+        )
+
+    profile = axisymmetric_profile(r_vals,z_vals)
+    mesh = axisymmetric_simplemesh(profile, n_theta)
+    MHmesh = Mesh(mesh)
+
+    if show_plot
+        plot_mesh(mesh, profile)
+    end
         
     return MHmesh
 end
