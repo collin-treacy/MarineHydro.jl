@@ -108,15 +108,24 @@ function compute_all(x_val, omegas)
 end
 
 
-r_initial = 0.5
-n_side = 3 # number of design vars-1 (draft is also a design var)
+function surface_area(x)
+    MH_mesh = arbitrary_axisymmetric_mesh(x)
+    return sum(MH_mesh.areas)
+end
 
-# inputs
-r_side = ones(n_side) * r_initial
-# r_side = collect(range(0.5, 0.001, length=n_side)) # last radius cannot be zero
-draft = 1.5
-x_val = vcat(r_side,draft)
+function compute_SA_and_gradient(x_val)
+    return value_and_gradient(x -> surface_area(x), backend, x_val)
+end
 
-omegas = [0.2, 0.3]
-AD_grads = compute_all(x_val, omegas)
-display(AD_grads)
+# r_initial = 0.5
+# n_side = 3 # number of design vars-1 (draft is also a design var)
+
+# # inputs
+# r_side = ones(n_side) * r_initial
+# # r_side = collect(range(0.5, 0.001, length=n_side)) # last radius cannot be zero
+# draft = 1.5
+# x_val = vcat(r_side,draft)
+
+# omegas = [0.2, 0.3]
+# AD_grads = compute_all(x_val, omegas)
+# display(AD_grads)
