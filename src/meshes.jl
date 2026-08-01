@@ -404,6 +404,7 @@ function Mesh(mesh::Meshes.SimpleMesh)
             b = vertices_mat[faces_vec[2],:]
             c = vertices_mat[faces_vec[3],:]
             center_vec = (a+b+c)/3
+            max_dis = maximum([norm(a-center_vec), norm(b-center_vec), norm(c-center_vec)])
         else # this is a quadrilateral element
             a = vertices_mat[faces_vec[1],:]
             b = vertices_mat[faces_vec[2],:]
@@ -414,6 +415,7 @@ function Mesh(mesh::Meshes.SimpleMesh)
             c1 = (a+b+c)/3
             c2 = (a+c+d)/3
             center_vec = (c1*area1 + c2*area2) / (area1 + area2)
+            max_dis = maximum([norm(a-center_vec), norm(b-center_vec), norm(c-center_vec), norm(d-center_vec)])
         end
         center_mat[i,:] = center_vec
 
@@ -422,7 +424,7 @@ function Mesh(mesh::Meshes.SimpleMesh)
         normals_mat[i,:] = normals_vec/norm(normals_vec) # normalize
 
         # compute radii
-        radii_vec[i] = norm(a-center_vec) # distance between center and first vertex
+        radii_vec[i] = max_dis # distance between center and farthest vertex
     end
 
     # need to subtract 1 from faces_mat to start indexing at 0 like cpt

@@ -16,7 +16,7 @@ function hydrostatic_program(x)
     dt = d2+d3
     Vt = pi * r1^2 * d1 + pi * r1^2 * dt/3 - pi * r2^2 * d3/3
     M = rho_w * Vt # mass of body [kg]
-    # display("Mass: $M")
+    display("Mass: $M")
     return [M, K]
 end
 
@@ -64,9 +64,16 @@ end
 
 backend = AutoForwardDiff()
 
+function WavebotMesh(x_val)
+    return wavebot_mesh(x_val[1],x_val[2],x_val[3],x_val[4],(3,3,3),10)
+end
+
+
+
+
 function compute_vals(x, omegas)
     set_rho!(1025.0)
-    mesh = wavebot_mesh(x[1],x[2],x[3],x[4],(3,3,3),10)
+    mesh = WavebotMesh(x)
     M_val, K_val = hydrostatic_program(x)
     results_per_omega = [compute_for_omega(mesh, omega) for omega in omegas]
     vec_reduced = reduce(vcat, results_per_omega)
@@ -76,6 +83,25 @@ end
 
 function compute_all(x_val, omegas)
     return value_and_jacobian(x -> compute_vals(x, omegas), backend, x_val)
+end
+
+function surface_area(x)
+    mesh = WavebotMesh(x)
+    return sum(mesh.areas)
+end
+
+function compute_SA_and_grad(x_val)
+    return value_and_gradient(x -> surface_area(x), backend, x_val)
+end
+
+function draft_fun(x)
+    mesh = WavebotMesh(x)
+    draft = abs(minimum(mesh.vertices[:,3]))
+    return draft
+end
+
+function compute_draft_and_grad(x_val)
+    return value_and_gradient(x -> draft_fun(x), backend, x_val)
 end
 
 
@@ -147,7 +173,14 @@ end
 # end
 
 
-# x_val = [0.88, 0.35, 0.16, 0.37]
-# omegas = [0.2, 0.3]
+# x_val = [0.88, 0.35, 0.17, 0.37]*0.1
+# hydrostatic_program(x_val)
+# omegas = [0.3, 2*0.3]*2*pi
 # AD_grads = compute_all(x_val, omegas)
 # display(AD_grads)
+
+# SA_and_grad = compute_SA_and_grad(x_val)
+# display(SA_and_grad)
+
+# draft_and_grad = compute_draft_and_grad(x_val)
+# display(draft_and_grad)

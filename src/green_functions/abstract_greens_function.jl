@@ -91,12 +91,14 @@ function with_reduced_coordinates(𝒢, element_1, element_2, wavenumber)
     
     dis_squared_raw = (x[1] - xi[1])^2 + (x[2] - xi[2])^2
     purt = 1e-18
-    if dis_squared_raw==0
-        # must perturb before sqrt since sqrt(0) returns NaN dual number derivative
-        dis = sqrt(dis_squared_raw + purt^2) - purt
-    else
-        dis = sqrt(dis_squared_raw)
-    end
+    # if dis_squared_raw==0
+    #     # must perturb before sqrt since sqrt(0) returns NaN dual number derivative
+    #     dis = sqrt(dis_squared_raw + purt^2) - purt
+    # else
+    #     dis = sqrt(dis_squared_raw)
+    # end
+    dis = sqrt(dis_squared_raw + purt^2) - purt
+
     r = wavenumber * dis
 
     # r  = wavenumber * hypot(x[1] - xi[1], x[2] - xi[2])
@@ -114,12 +116,13 @@ function with_reduced_coordinates_derivative(d𝒢, element_1, element_2, wavenu
 
     dis_squared_raw = (x[1] - xi[1])^2 + (x[2] - xi[2])^2
     purt = 1e-18
-    if dis_squared_raw==0
-        # must perturb before sqrt since sqrt(0) returns NaN dual number derivative
-        dis = sqrt(dis_squared_raw + purt^2) - purt
-    else
-        dis = sqrt(dis_squared_raw)
-    end
+    # if dis_squared_raw==0
+    #     # must perturb before sqrt since sqrt(0) returns NaN dual number derivative
+    #     dis = sqrt(dis_squared_raw + purt^2) - purt
+    # else
+    #     dis = sqrt(dis_squared_raw)
+    # end
+    dis = sqrt(dis_squared_raw + purt^2) - purt
 
     r = wavenumber * dis
 

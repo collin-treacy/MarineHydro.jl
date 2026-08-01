@@ -15,19 +15,25 @@ export SETTINGS, set_g!, set_rho!
 
 include("green_functions/abstract_greens_function.jl")
 export greens, gradient_greens, integral, integral_gradient, with_reduced_coordinates
+export with_reduced_coordinates_derivative
 include("green_functions/rankine.jl")
 export Rankine
+export integral_gradient
 include("green_functions/rankine_reflected.jl")
 export RankineReflected
+export integral_gradient
 include("green_functions/rankine_reflected_negative.jl")
 export RankineReflectedNegative
 include("green_functions/wu.jl")
 export GFWu
+export integral_gradient, both_greens_and_gradient_greens
 include("green_functions/exact_Guevel_Delhommeau.jl")
 export ExactGuevelDelhommeau
 
 include("meshes.jl")
 export Mesh, element, combine_meshes, +, wavebot_mesh, axisymmetric_mesh
+export center, normal, area, radius, vertices, free_surface_symmetry
+export axisymmetric_simplemesh, wavebot_profile 
 
 include("bodies.jl")
 export FloatingBody, combine_floatingbodies, +

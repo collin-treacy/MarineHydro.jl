@@ -21,6 +21,36 @@ function gradient_greens(::Rankine, element_1, element_2, wavenumber=nothing; wi
     end
 end
 
+# Must make abs(GZ) and sign(GZ) differentiable
+# if GZ==0 in integral() below
+# function diffable_abs(x, purt)
+#     abs_val = sqrt(x^2 + purt^2)
+#     return abs_val
+# end
+
+function diffable_abs(x, purt)
+    abs_val = abs(x)
+    return abs_val
+end
+# function diffable_sign(x, purt)
+#     # sign_val = x/diffable_abs(x, purt)
+#     if x==0
+#         sign_val = sign(x+purt)
+#     else
+#         sign_val = sign(x)
+#     end
+#     return sign_val
+# end
+# function diffable_sign(x, purt)
+#     sign_val = x/diffable_abs(x, purt)
+#     return sign_val
+# end
+
+function diffable_sign(x, purt)
+    sign_val = sign(x)
+    return sign_val
+end
+
 function integral(::Rankine, element_1, element_2, wavenumber=nothing)
     point = center(element_1)
     source_point = center(element_2)
@@ -35,6 +65,12 @@ function integral(::Rankine, element_1, element_2, wavenumber=nothing)
     else  # else (if close) deal with singularity
         integral = zero(source_area)
         GZ = dot(r̄, source_normal)
+
+        # Absolute value
+        purt1 = 1e-18 # can get away with smaller value since 
+        # deriv of abs at 0 using central dif is zero regardless of purt
+        GZ_abs = diffable_abs(GZ, purt1) 
+
         RR = ntuple(i -> _distance(point, source_vertices[i,:]), 4)
         for index_vertex in 1:4
             current_vertex = source_vertices[index_vertex, :]
@@ -47,8 +83,8 @@ function integral(::Rankine, element_1, element_2, wavenumber=nothing)
                 if abs(GZ) >= 1e-4 * source_radius
                     ANT = 2 * GY * segment_length
                     DNT = (RR[index_next_vertex] + RR[index_vertex])^2 - segment_length^2 +
-                            2 * abs(GZ) * (RR[index_next_vertex] + RR[index_vertex])
-                    integral -= 2*abs(GZ) * atan(ANT, DNT)
+                            2 * GZ_abs * (RR[index_next_vertex] + RR[index_vertex])
+                    integral -= 2*GZ_abs * atan(ANT, DNT)
                 end
                 if abs(GY) > 1e-5
                     ANL = RR[index_next_vertex] + RR[index_vertex] + segment_length
@@ -79,6 +115,21 @@ function both_integral_and_integral_gradient(::Rankine, element_1, element_2, wa
         integral = zero(source_area)
         integral_gradient = zero(point)
         GZ = dot(r̄, source_normal)
+
+        # Absolute value
+        purt1 = 1e-18 # can get away with smaller value since 
+        # deriv of abs at 0 using central dif is zero regardless of purt
+        GZ_abs = diffable_abs(GZ, purt1) 
+
+        # Sign
+        purt2 = 1e-5 # may need to change
+        GZ_sign = diffable_sign(GZ, purt2)
+        # noticable error when -5*put2<GZ< 5*purt2
+        # want GZ during finite difference about GZ=0 to be in this range 
+        # Otherwise, do not want to be in this range. In future consider
+        # changing purt2 based on mesh size of problem.
+
+
         RR = ntuple(i -> _distance(point, source_vertices[i,:]), 4)
         DRX = ntuple(i -> (point - source_vertices[i,:]) / RR[i], 4)
         for index_vertex in 1:4
@@ -92,7 +143,7 @@ function both_integral_and_integral_gradient(::Rankine, element_1, element_2, wa
                 GY = dot(point - current_vertex, GYX)
                 ANT = 2 * GY * segment_length
                 DNT = (RR[index_next_vertex] + RR[index_vertex])^2 - segment_length^2 +
-                    2 * abs(GZ) * (RR[index_next_vertex] + RR[index_vertex])
+                    2 * GZ_abs * (RR[index_next_vertex] + RR[index_vertex])
                 ANL = RR[index_next_vertex] + RR[index_vertex] + segment_length
                 DNL = RR[index_next_vertex] + RR[index_vertex] - segment_length
                 ALDEN = log(ANL / DNL)
@@ -104,14 +155,14 @@ function both_integral_and_integral_gradient(::Rankine, element_1, element_2, wa
                 #error bound error in the line below...
                 ANLX = DRX[index_next_vertex] + DRX[index_vertex]
                 ANTX = 2 * segment_length * GYX
-                DNTX = 2 * (RR[index_next_vertex] + RR[index_vertex] + abs(GZ)) * ANLX +
-                    2 * sign(GZ) * (RR[index_next_vertex] + RR[index_vertex]) * source_normal
+                DNTX = 2 * (RR[index_next_vertex] + RR[index_vertex] + GZ_abs) * ANLX +
+                    2 * GZ_sign * (RR[index_next_vertex] + RR[index_vertex]) * source_normal
 
                 integral += GY * ALDEN
                 integral_gradient = integral_gradient .-
-                                        (ALDEN .* GYX .- 2 * sign(GZ) * AT .* source_normal .+
+                                        (ALDEN .* GYX .- 2 * GZ_sign * AT .* source_normal .+
                                         GY * (DNL - ANL) ./ (ANL .* DNL) .* ANLX .-
-                                        2 * abs(GZ) .* (ANTX .* DNT .- DNTX .* ANT) ./ (ANT .* ANT .+ DNT .* DNT))
+                                        2 * GZ_abs .* (ANTX .* DNT .- DNTX .* ANT) ./ (ANT .* ANT .+ DNT .* DNT))
             end
         end
     end
