@@ -477,3 +477,100 @@ function wavebot_mesh(r1,r2,d1,d2,n_points = (5, 10, 5),n_theta = 72)
         
     return MHmesh
 end
+
+
+function axisymmetric_profile(
+    r_vals::Vector = [1.0, 1.0, 1.0],
+    z_vals::Vector = [1e-3, -0.5, -1.0]
+)
+    points = [Meshes.Point(r, z) for (r, z) in zip(r_vals, z_vals)]
+    return Meshes.Rope(points)
+end
+
+
+function axisymmetric_mesh(
+        r_vals::Vector = [1.0, 1.0, 1.0],
+        z_vals::Vector = [1e-3, -0.5, -1.0],
+        n_theta = 72,
+        show_plot=false
+        )
+
+    profile = axisymmetric_profile(r_vals,z_vals)
+    mesh = axisymmetric_simplemesh(profile, n_theta)
+    MHmesh = Mesh(mesh)
+
+    if show_plot
+        plot_mesh(mesh, profile)
+    end
+        
+    return MHmesh
+end
+
+function axisymmetric_simplemesh(profile::Meshes.Rope, n_theta::Integer=72)
+    @assert n_theta >= 3 "n_theta must be at least 3"
+    @assert length(profile.vertices) >= 2 "profile must contain at least two points"
+
+    # Points: Revolve each 2D profile point (r, z) into a 3D ring,
+    #  treat zero radius points as special cases
+    p1 = Meshes.coords(first(profile.vertices))
+    points = typeof(Meshes.Point(p1.x, zero(p1.x), p1.y))[]
+    ring_starts = Int[]
+    ring_sizes = Int[]
+
+    for p in profile.vertices
+        r = Meshes.coords(p).x
+        z = Meshes.coords(p).y
+        @assert r >= zero(r) "profile radii must be nonnegative"
+        push!(ring_starts, length(points) + 1)
+        if iszero(r)
+            push!(ring_sizes, 1)
+            push!(points, Meshes.Point(zero(r), zero(r), z))
+        else
+            push!(ring_sizes, n_theta)
+            for i in 0:(n_theta-1)
+                θ = 2pi * i / n_theta
+                push!(points, Meshes.Point(r * cos(θ), r * sin(θ), z))
+            end
+        end
+    end
+
+    # Connections: use quads between regular rings and triangles for zero radius points.
+    connec = Union{
+        typeof(Meshes.connect((1, 2, 3), Meshes.Triangle)),
+        typeof(Meshes.connect((1, 2, 3, 4), Meshes.Quadrangle)),
+    }[]
+    for layer in 1:(length(profile.vertices)-1)
+        start_1 = ring_starts[layer]
+        start_2 = ring_starts[layer+1]
+        size_1 = ring_sizes[layer]
+        size_2 = ring_sizes[layer+1]
+
+        if size_1 == 1 && size_2 == 1
+            error("adjacent points cannot both have radius 0")
+        elseif size_1 == 1
+            ir0 = start_1
+            for i in 0:(n_theta-1)
+                i3 = start_2 + i
+                i4 = start_2 + mod(i + 1, n_theta)
+                push!(connec, Meshes.connect((ir0, i3, i4), Triangle))
+            end
+        elseif size_2 == 1
+            ir0 = start_2
+            for i in 0:(n_theta-1)
+                i1 = start_1 + i
+                i2 = start_1 + mod(i + 1, n_theta)
+                push!(connec, Meshes.connect((i1, ir0, i2), Meshes.Triangle))
+            end
+        else
+            for i in 0:(n_theta-1)
+                i1 = start_1 + i
+                i2 = start_1 + mod(i + 1, n_theta)
+                i3 = start_2 + i
+                i4 = start_2 + mod(i + 1, n_theta)
+                push!(connec, Meshes.connect((i1, i3, i4, i2), Meshes.Quadrangle))
+            end
+        end
+    end
+
+    return Meshes.SimpleMesh(points, connec)
+end

@@ -35,6 +35,9 @@ function integral(::Rankine, element_1, element_2, wavenumber=nothing)
     else  # else (if close) deal with singularity
         integral = zero(source_area)
         GZ = dot(r̄, source_normal)
+        if GZ isa ForwardDiff.Dual && ForwardDiff.value(GZ) == 0 && !iszero(ForwardDiff.partials(GZ))
+            println("GZ is a Dual number with value 0 and non-zero derivative: ", GZ)
+        end
         RR = ntuple(i -> _distance(point, source_vertices[i,:]), 4)
         for index_vertex in 1:4
             current_vertex = source_vertices[index_vertex, :]
@@ -79,6 +82,9 @@ function both_integral_and_integral_gradient(::Rankine, element_1, element_2, wa
         integral = zero(source_area)
         integral_gradient = zero(point)
         GZ = dot(r̄, source_normal)
+        if GZ isa ForwardDiff.Dual && ForwardDiff.value(GZ) == 0 && !iszero(ForwardDiff.partials(GZ))
+            println("GZ is a Dual number with value 0 and non-zero derivative")
+        end
         RR = ntuple(i -> _distance(point, source_vertices[i,:]), 4)
         DRX = ntuple(i -> (point - source_vertices[i,:]) / RR[i], 4)
         for index_vertex in 1:4

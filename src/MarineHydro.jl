@@ -27,7 +27,7 @@ include("green_functions/exact_Guevel_Delhommeau.jl")
 export ExactGuevelDelhommeau
 
 include("meshes.jl")
-export Mesh, element, combine_meshes, +, wavebot_mesh
+export Mesh, element, combine_meshes, +, wavebot_mesh, axisymmetric_mesh
 
 include("bodies.jl")
 export FloatingBody, combine_floatingbodies, +
