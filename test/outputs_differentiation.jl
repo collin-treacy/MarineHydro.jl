@@ -84,6 +84,10 @@ end
     end
 end
 
+
+
+
+
 @testset "Gradient accuracy check with Finite diff [w.r.t omega] for MDOF cylnder" begin
     
     # Description of problem
@@ -154,21 +158,23 @@ end
 
 
 
+# Tests sensitivities wrt all inputs
 
+# Note, for differentiating wrt mesh (radial panel position), 
+# GZ within rankine.jl has zero value but nonzero partials.
+# In this case, abs(GZ=0) and sign(GZ=0) are not
+# differentiatiable, but we used smooth versions of these
+# functions that are.
 
-
-# Tests for cases when GZ within rankine.jl has zero value but nonzero partials.
-# In these cases, abs() and sign() are not differentiatiable, but we use smooth
-# versions of these functions that are.
-omegas = [1.0, 1.5] # frequencies [rad/s]
-beta = 0 # incident wave angle [rad]
+omegas_vals = [1.0, 1.5] # frequencies [rad/s]
+betas_vals = [0.0, pi/4] # incident wave angle [rad]
+forward_speeds_vals = [0.0, 2.0] # forward speed in x direction [m/s]
 t_DOFs = ["Heave"] # translational DOFs
 r_DOFs = ["Pitch"] # rotational DOFs
 DOFs = [t_DOFs; r_DOFs] # all DOFs
 r_initial = 0.5
 n_side = 3 # number of design vars-1 (draft is also a design var)
-
-@testset "Gradient wrt radial panel position for $shape" for shape in ["cylinder", "frustrum"]
+@testset "Sensitivity wrt $ind_var_name for $shape" for shape in ["cylinder", "frustrum"], ind_var_name in ["mesh (radial panel position)", "frequency", "wave direction", "forward speed"]
 
     if shape == "cylinder"
         r_side = ones(n_side) * r_initial
@@ -196,41 +202,55 @@ n_side = 3 # number of design vars-1 (draft is also a design var)
         return MH_mesh
     end
 
-    # Radiation solve functions
-    function A_and_B_vec(floatingbody)
-        parameters = (wave_frequencies=omegas,
-            radiating_dofs=collect(keys(floatingbody.dofs)),
-            influenced_dofs=collect(keys(floatingbody.dofs)))
-        data = compute_hydrodynamic_coefficients(parameters, floatingbody)
-        return vcat(vec(data.added_mass), vec(data.radiation_damping)) 
-    end
-
-    # Incident + diffraction solve function
-    function F_ex_vec(floatingbody)
-        parameters = (wave_frequencies=omegas,
-            wave_directions=[beta],
-            influenced_dofs=collect(keys(floatingbody.dofs)))
-        data = compute_hydrodynamic_coefficients(parameters, floatingbody)
-        return vcat(real.(vec(data.excitation_force)),imag.(vec(data.excitation_force))) 
-    end
-
-    function compute_vals(x)
+    function compute_vals(x, omegas, betas, forward_speeds)
         mesh = arbitrary_axisymmetric_mesh(x, false)
         rigid_dof_list = DOFs
         rotation_center = [1.0, 1.0, 0.0] # off set for nonzero off-diagoinal elements
-        floatingbody = FloatingBody(mesh, rigid_dof_list, rotation_center, "Cylinder")
-        rad_vec = A_and_B_vec(floatingbody)
-        diff_vec = F_ex_vec(floatingbody)
-        return vcat(rad_vec,diff_vec)
+        floatingbody = FloatingBody(mesh, rigid_dof_list, rotation_center, "floating body")
+        parameters = (wave_frequencies=omegas,
+            wave_directions=betas,
+            radiating_dofs=collect(keys(floatingbody.dofs)),
+            influenced_dofs=collect(keys(floatingbody.dofs)),
+            forward_speeds=forward_speeds)
+        data = compute_hydrodynamic_coefficients(parameters, floatingbody, direct=false)
+        return vcat(
+            vec(data.added_mass),
+            vec(data.radiation_damping),
+            real.(vec(data.Froude_Krylov_force)),
+            imag.(vec(data.Froude_Krylov_force)),
+            real.(vec(data.diffraction_force)),
+            imag.(vec(data.diffraction_force)),
+            real.(vec(data.excitation_force)),
+            imag.(vec(data.excitation_force))) 
     end
 
+    function compute_wrt_ind_var(ind_var)
+        if ind_var_name=="mesh (radial panel position)"
+            return compute_vals(ind_var, omegas_vals, betas_vals, forward_speeds_vals)
+        elseif ind_var_name=="frequency"
+            return compute_vals(x_val, ind_var, betas_vals, forward_speeds_vals)
+        elseif ind_var_name=="wave direction"
+            return compute_vals(x_val, omegas_vals, ind_var, forward_speeds_vals)
+        elseif ind_var_name=="forward speed"
+            return compute_vals(x_val, omegas_vals, betas_vals, ind_var)
+        end
+    end
+
+    if ind_var_name=="mesh (radial panel position)"
+        ind_var_val = x_val
+    elseif ind_var_name=="frequency"
+        ind_var_val = omegas_vals
+    elseif ind_var_name=="wave direction"
+        ind_var_val = betas_vals
+    elseif ind_var_name=="forward speed"
+        ind_var_val = forward_speeds_vals
+    end
     
     method = central_fdm(5, 1; max_range=1e-4)
-    J_FD = FiniteDifferences.jacobian(method, x -> compute_vals(x), x_val)[1]
+    J_FD = FiniteDifferences.jacobian(method, ind_var -> compute_wrt_ind_var(ind_var), ind_var_val)[1]
 
     backend = AutoForwardDiff()
-    AD_v_J = value_and_jacobian(x -> compute_vals(x), backend, x_val)
-    J_AD = AD_v_J[2]
+    J_AD = value_and_jacobian(ind_var -> compute_wrt_ind_var(ind_var), backend, ind_var_val)[2]
 
     @testset "Verify jacobian matrix with finite difference" begin
         n_row = length(J_AD[:,1])
@@ -244,6 +264,5 @@ n_side = 3 # number of design vars-1 (draft is also a design var)
         end
     end
 end
-
  
 
