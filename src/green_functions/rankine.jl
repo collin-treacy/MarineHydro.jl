@@ -21,6 +21,8 @@ function gradient_greens(::Rankine, element_1, element_2, wavenumber=nothing; wi
     end
 end
 
+method = "differentiable"
+
 function integral(::Rankine, element_1, element_2, wavenumber=nothing)
     point = center(element_1)
     source_point = center(element_2)
@@ -35,9 +37,6 @@ function integral(::Rankine, element_1, element_2, wavenumber=nothing)
     else  # else (if close) deal with singularity
         integral = zero(source_area)
         GZ = dot(r̄, source_normal)
-        if GZ isa ForwardDiff.Dual && ForwardDiff.value(GZ) == 0 && !iszero(ForwardDiff.partials(GZ))
-            println("GZ is a Dual number with value 0 and non-zero derivative: ", GZ)
-        end
         RR = ntuple(i -> _distance(point, source_vertices[i,:]), 4)
         for index_vertex in 1:4
             current_vertex = source_vertices[index_vertex, :]
@@ -47,13 +46,13 @@ function integral(::Rankine, element_1, element_2, wavenumber=nothing)
             segment_length = norm(current_to_next)
             if segment_length >= 1e-3 * source_radius
                 GY = dot(point - current_vertex, cross(source_normal, current_to_next / segment_length))
-                if abs(GZ) >= 1e-4 * source_radius
+                if _abs(GZ,method) >= 1e-4 * source_radius
                     ANT = 2 * GY * segment_length
                     DNT = (RR[index_next_vertex] + RR[index_vertex])^2 - segment_length^2 +
-                            2 * abs(GZ) * (RR[index_next_vertex] + RR[index_vertex])
-                    integral -= 2*abs(GZ) * atan(ANT, DNT)
+                            2 * _abs(GZ,method) * (RR[index_next_vertex] + RR[index_vertex])
+                    integral -= 2*_abs(GZ,method) * atan(ANT, DNT)
                 end
-                if abs(GY) > 1e-5
+                if _abs(GY,method) > 1e-5
                     ANL = RR[index_next_vertex] + RR[index_vertex] + segment_length
                     DNL = RR[index_next_vertex] + RR[index_vertex] - segment_length
                     ALDEN = log(ANL / DNL)
@@ -82,9 +81,6 @@ function both_integral_and_integral_gradient(::Rankine, element_1, element_2, wa
         integral = zero(source_area)
         integral_gradient = zero(point)
         GZ = dot(r̄, source_normal)
-        if GZ isa ForwardDiff.Dual && ForwardDiff.value(GZ) == 0 && !iszero(ForwardDiff.partials(GZ))
-            println("GZ is a Dual number with value 0 and non-zero derivative")
-        end
         RR = ntuple(i -> _distance(point, source_vertices[i,:]), 4)
         DRX = ntuple(i -> (point - source_vertices[i,:]) / RR[i], 4)
         for index_vertex in 1:4
@@ -98,11 +94,11 @@ function both_integral_and_integral_gradient(::Rankine, element_1, element_2, wa
                 GY = dot(point - current_vertex, GYX)
                 ANT = 2 * GY * segment_length
                 DNT = (RR[index_next_vertex] + RR[index_vertex])^2 - segment_length^2 +
-                    2 * abs(GZ) * (RR[index_next_vertex] + RR[index_vertex])
+                    2 * _abs(GZ,method) * (RR[index_next_vertex] + RR[index_vertex])
                 ANL = RR[index_next_vertex] + RR[index_vertex] + segment_length
                 DNL = RR[index_next_vertex] + RR[index_vertex] - segment_length
                 ALDEN = log(ANL / DNL)
-                if abs(GZ) >= 1e-4 * source_radius
+                if _abs(GZ,method) >= 1e-4 * source_radius
                     AT = atan(ANT, DNT)  #check difference
                 else
                     AT = zero(ANT)
@@ -110,14 +106,14 @@ function both_integral_and_integral_gradient(::Rankine, element_1, element_2, wa
                 #error bound error in the line below...
                 ANLX = DRX[index_next_vertex] + DRX[index_vertex]
                 ANTX = 2 * segment_length * GYX
-                DNTX = 2 * (RR[index_next_vertex] + RR[index_vertex] + abs(GZ)) * ANLX +
-                    2 * sign(GZ) * (RR[index_next_vertex] + RR[index_vertex]) * source_normal
+                DNTX = 2 * (RR[index_next_vertex] + RR[index_vertex] + _abs(GZ,method)) * ANLX +
+                    2 * _sign(GZ,method) * (RR[index_next_vertex] + RR[index_vertex]) * source_normal
 
                 integral += GY * ALDEN
                 integral_gradient = integral_gradient .-
-                                        (ALDEN .* GYX .- 2 * sign(GZ) * AT .* source_normal .+
+                                        (ALDEN .* GYX .- 2 * _sign(GZ,method) * AT .* source_normal .+
                                         GY * (DNL - ANL) ./ (ANL .* DNL) .* ANLX .-
-                                        2 * abs(GZ) .* (ANTX .* DNT .- DNTX .* ANT) ./ (ANT .* ANT .+ DNT .* DNT))
+                                        2 * _abs(GZ,method) .* (ANTX .* DNT .- DNTX .* ANT) ./ (ANT .* ANT .+ DNT .* DNT))
             end
         end
     end
@@ -131,4 +127,39 @@ end
 
 function integral_gradient(gf::Rankine, element_1, element_2, wavenumber=nothing; with_respect_to_first_variable=false)
     both_integral_and_integral_gradient(gf, element_1, element_2, wavenumber; with_respect_to_first_variable)[2]
+end
+
+
+
+
+function _abs(x,method)
+    if method=="original"
+        return abs(x)
+    elseif method=="differentiable"
+        purt=1e-8
+        return _diffable_abs(x, purt)
+    elseif method=="piecewise"
+        return ifelse(x<zero(x),-x,x)
+    end
+end
+
+
+function _sign(x,method)
+    if method=="original"
+        return sign(x)
+    elseif method=="differentiable"
+        purt=1e-8
+        return _diffable_sign(x, purt)
+    elseif method=="piecewise"
+        return ifelse(x<zero(x),-one(x),one(x))
+    end
+end
+
+
+function _diffable_abs(x,purt)
+    return sqrt(x^2 + purt^2)
+end
+
+function _diffable_sign(x,purt)
+    return x/_diffable_abs(x,purt)
 end

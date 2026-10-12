@@ -9,4 +9,5 @@ using Test
     include("./consistency_with_analytical_solutions.jl")
     include("./outputs_differentiation.jl")
     include("./forward_speed_tests.jl")
+    include("./irregular_frequency_removal.jl")
 end

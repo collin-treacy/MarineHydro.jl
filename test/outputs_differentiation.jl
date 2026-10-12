@@ -5,7 +5,7 @@ using LinearAlgebra
 using DifferentiationInterface 
 import ForwardDiff 
 import Zygote
-
+using FiniteDifferences
 
 @testset "Integrate Pressure " begin
     cpt = pyimport("capytaine")
@@ -153,19 +153,29 @@ end
 end
 
 
-@testset "Gradient wrt panel position for cylinder" begin
 
-    # Description of problem
-    omegas = [1.0, 1.5] # frequencies [rad/s]
-    beta = 0 # incident wave angle [rad]
-    t_DOFs = ["Heave"] # translational DOFs
-    r_DOFs = ["Pitch"] # rotational DOFs
-    DOFs = [t_DOFs; r_DOFs] # all DOFs
 
-    r_initial = 0.5
-    n_side = 3 # number of design vars-1 (draft is also a design var)
-    # r_side = ones(n_side) * r_initial
-    r_side = collect(range(r_initial, 0.1, length=n_side))
+
+
+# Tests for cases when GZ within rankine.jl has zero value but nonzero partials.
+# In these cases, abs() and sign() are not differentiatiable, but we use smooth
+# versions of these functions that are.
+omegas = [1.0, 1.5] # frequencies [rad/s]
+beta = 0 # incident wave angle [rad]
+t_DOFs = ["Heave"] # translational DOFs
+r_DOFs = ["Pitch"] # rotational DOFs
+DOFs = [t_DOFs; r_DOFs] # all DOFs
+r_initial = 0.5
+n_side = 3 # number of design vars-1 (draft is also a design var)
+
+@testset "Gradient wrt radial panel position for $shape" for shape in ["cylinder", "frustrum"]
+
+    if shape == "cylinder"
+        r_side = ones(n_side) * r_initial
+    elseif shape == "frustrum"
+        r_side = collect(range(r_initial, 0.1, length=n_side))
+    end
+
     draft = 1.5
     x_val = vcat(r_side,draft)
 
@@ -215,8 +225,7 @@ end
     end
 
     
-    # method = forward_fdm(5, 1)
-    method = central_fdm(5, 1)
+    method = central_fdm(5, 1; max_range=1e-4)
     J_FD = FiniteDifferences.jacobian(method, x -> compute_vals(x), x_val)[1]
 
     backend = AutoForwardDiff()
@@ -224,6 +233,17 @@ end
     J_AD = AD_v_J[2]
 
     @testset "Verify jacobian matrix with finite difference" begin
-        @test  J_AD ≈ J_FD atol=1e-6 rtol = 1e-6
+        n_row = length(J_AD[:,1])
+        n_col = length(J_AD[1,:])
+        for i in 1:n_row
+            for j in 1:n_col
+                @testset "Row $i column $j" begin            
+                    @test  J_AD[i,j] ≈ J_FD[i,j] atol=1e-6 rtol = 1e-4
+                end
+            end
+        end
     end
 end
+
+ 
+
