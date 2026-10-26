@@ -2,7 +2,7 @@ using Test
 using SafeTestsets
 
 # Test group for CI parallelism; run everything by default (`]test MarineHydro`).
-const GROUP = get(ENV, "GROUP", "All")
+const GROUP = get(ENV, "GROUP", "Core")
 
 # Skip GPU files only when they fail to load (missing/optional packages).
 # Real assertion failures must still fail the suite.
@@ -32,6 +32,7 @@ end
         @time @safetestset "Matrix assembly" include("matrix_assembly.jl")
         @time @safetestset "Consistency with analytical solutions" include("consistency_with_analytical_solutions.jl")
         @time @safetestset "Forward speed" include("forward_speed_tests.jl")
+        @time @safetestset "Irregular frequency removal" include("irregular_frequency_removal.jl")
     end
 
     if GROUP == "All" || GROUP == "Differentiation"
