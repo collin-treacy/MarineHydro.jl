@@ -4,6 +4,9 @@ import ForwardDiff
 using PyCall
 using Test
 using DimensionalData
+using OpenBLAS_jll
+using LinearAlgebra
+using Enzyme
 cpt = pyimport("capytaine")
 
 const FS_HAS_ENZYME = try
