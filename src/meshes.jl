@@ -127,18 +127,51 @@ function Mesh(mesh::PyObject)
     return mesh
 end
 
+# function StaticArraysMesh(mesh::PyObject)
+#     mesh = StaticArraysMesh(
+#         [SVector(v[1], v[2], v[3]) for v in eachrow(mesh.vertices)],
+#         [SVector(f[1], f[2], f[3], f[4]) .+ 1 for f in eachrow(mesh.faces)],
+#         [SVector(c[1], c[2], c[3]) for c in eachrow(mesh.faces_centers)],
+#         [SVector(n[1], n[2], n[3]) for n in eachrow(mesh.faces_normals)],
+#         mesh.faces_areas,
+#         mesh.faces_radiuses,
+#         mesh.nb_vertices,
+#         mesh.nb_faces
+#     )
+#     return mesh
+# end
+
 function StaticArraysMesh(mesh::PyObject)
-    mesh = StaticArraysMesh(
-        [SVector(v[1], v[2], v[3]) for v in eachrow(mesh.vertices)],
-        [SVector(f[1], f[2], f[3], f[4]) .+ 1 for f in eachrow(mesh.faces)],
-        [SVector(c[1], c[2], c[3]) for c in eachrow(mesh.faces_centers)],
-        [SVector(n[1], n[2], n[3]) for n in eachrow(mesh.faces_normals)],
-        mesh.faces_areas,
-        mesh.faces_radiuses,
-        mesh.nb_vertices,
-        mesh.nb_faces
-    )
-    return mesh
+    # 1. Convert Python properties into standard, concrete Julia matrices/vectors
+    verts_mat   = convert(Matrix{Float64}, mesh.vertices)
+    faces_mat   = convert(Matrix{Int}, mesh.faces)
+    centers_mat = convert(Matrix{Float64}, mesh.faces_centers)
+    normals_mat = convert(Matrix{Float64}, mesh.faces_normals)
+    
+    areas_vec   = convert(Vector{Float64}, mesh.faces_areas)
+    radii_vec   = convert(Vector{Float64}, mesh.faces_radiuses)
+    
+    n_verts = Int(mesh.nb_vertices)
+    n_faces = Int(mesh.nb_faces)
+
+    # 2. Construct SVectors from concrete Julia types
+    verts = [SVector{3, Float64}(verts_mat[i, 1], verts_mat[i, 2], verts_mat[i, 3]) 
+             for i in 1:n_verts]
+
+    # Convert 0-based Python indices to 1-based Julia Int indices
+    faces = [SVector{4, Int}(faces_mat[i, 1] + 1, 
+                             faces_mat[i, 2] + 1, 
+                             faces_mat[i, 3] + 1, 
+                             faces_mat[i, 4] + 1) 
+             for i in 1:n_faces]
+
+    centers = [SVector{3, Float64}(centers_mat[i, 1], centers_mat[i, 2], centers_mat[i, 3]) 
+               for i in 1:n_faces]
+
+    normals = [SVector{3, Float64}(normals_mat[i, 1], normals_mat[i, 2], normals_mat[i, 3]) 
+               for i in 1:n_faces]
+
+    return StaticArraysMesh(verts, faces, centers, normals, areas_vec, radii_vec, n_verts, n_faces)
 end
 
 # `Mesh` stores 0-based faces (Capytaine convention). StaticArraysMesh is 1-based.
@@ -385,10 +418,10 @@ function axisymmetric_mesh(profile::Meshes.Rope, n_theta::Integer=72)
 end
 
 function wavebot_profile(
-    cylinder_height::Union{Length,Number}=0.16m,
-    frustum_height::Union{Length,Number}=0.37m,
-    top_radius::Union{Length,Number}=0.88m,
-    bottom_radius::Union{Length,Number}=0.35m;
+    cylinder_height=0.16m,
+    frustum_height=0.37m,
+    top_radius=0.88m,
+    bottom_radius=0.35m;
     n_points::NTuple{3,Integer}=(5, 10, 5),
 )
     R = promote_type(typeof(top_radius), typeof(bottom_radius))
@@ -430,10 +463,12 @@ function Mesh(mesh::Meshes.SimpleMesh)
     z_vals = [ustrip.(v.coords.z) for v in verts]
     vertices_mat = hcat(x_vals,y_vals,z_vals)
 
+    T = eltype(vertices_mat)
+
     # get faces
     connec = Meshes.topology(mesh).connec
     n_faces = length(connec)
-    faces_mat = zeros(Number, n_faces, 4)
+    faces_mat = zeros(Int, n_faces, 4)
     for i in 1:n_faces
         inds = Meshes.indices(connec[i])
         inds_vec = collect(inds)
@@ -446,7 +481,7 @@ function Mesh(mesh::Meshes.SimpleMesh)
     end
 
     # get areas
-    areas_vec = ustrip.(Meshes.area.(mesh))
+    areas_vec = Vector{T}(ustrip.(Meshes.area.(mesh)))
 
     # get nvertices
     nvertices = length(vertices_mat[:,1])
@@ -455,9 +490,10 @@ function Mesh(mesh::Meshes.SimpleMesh)
     nfaces = length(faces_mat[:,1])
 
     # get centers and normals (area centroid, not verex centroid)
-    center_mat = zeros(Number, nfaces,3)
-    normals_mat = zeros(Number, nfaces,3)
-    radii_vec = zeros(Number, nfaces)
+    center_mat  = zeros(T, nfaces, 3)
+    normals_mat = zeros(T, nfaces, 3)
+    radii_vec   = zeros(T, nfaces)
+
     for i in 1:nfaces
 
         # compute center
