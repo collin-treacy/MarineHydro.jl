@@ -2,7 +2,6 @@ using MarineHydro
 using PyCall
 using Test
 using DimensionalData
-using Plots
 cpt = pyimport("capytaine")
 
 
