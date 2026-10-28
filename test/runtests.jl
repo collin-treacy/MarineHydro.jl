@@ -2,7 +2,7 @@ using Test
 using SafeTestsets
 
 # Test group for CI parallelism; run everything by default (`]test MarineHydro`).
-const GROUP = get(ENV, "GROUP", "Core")
+const GROUP = get(ENV, "GROUP", "Differentiation")
 
 # Skip GPU files only when they fail to load (missing/optional packages).
 # Real assertion failures must still fail the suite.
