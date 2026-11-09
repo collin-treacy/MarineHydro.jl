@@ -6,7 +6,7 @@ import DifferentiationInterface as DI
 using Enzyme
 using Printf
 
-mesh_from_cpt = true
+mesh_from_cpt = false
 static_arrays_mesh = false
 
 if mesh_from_cpt
@@ -48,16 +48,46 @@ const rev = AutoEnzyme(; mode=Enzyme.set_runtime_activity(Enzyme.Reverse))
 
 radiation_solve(r, ω, form=formulation) = solve(RadiationProblem(body(r), ω), form)
 
-sol = radiation_solve(r0, ω0)
-@printf("A₃₃ = %.6f\nB₃₃ = %.6f\n", added_mass(sol).Heave, radiation_damping(sol).Heave)
+# sol = radiation_solve(r0, ω0)
+# @printf("A₃₃ = %.6f\nB₃₃ = %.6f\n", added_mass(sol).Heave, radiation_damping(sol).Heave)
 
 added_mass_r(r) = added_mass(radiation_solve(r, ω0)).Heave
 added_mass_ω(ω) = added_mass(radiation_solve(r0, ω)).Heave
 
 dA_dr  = DI.derivative(added_mass_r, fwd, r0)
-dA_dr′ = DI.derivative(added_mass_r, rev, r0)   # first Enzyme call compiles
-dA_dω  = DI.derivative(added_mass_ω, fwd, ω0)
-dA_dω′ = DI.derivative(added_mass_ω, rev, ω0)
+# dA_dr′ = DI.derivative(added_mass_r, rev, r0)   # first Enzyme call compiles
+# dA_dω  = DI.derivative(added_mass_ω, fwd, ω0)
+# dA_dω′ = DI.derivative(added_mass_ω, rev, ω0)
 
-@printf("dA₃₃/dr   ForwardDiff %.6f   Enzyme %.6f\n", dA_dr, dA_dr′)
-@printf("dA₃₃/dω   ForwardDiff %.6f   Enzyme %.6f\n", dA_dω, dA_dω′)
+println("dA_dr: $dA_dr")
+
+# @printf("dA₃₃/dr   ForwardDiff %.6f   Enzyme %.6f\n", dA_dr, dA_dr′)
+# @printf("dA₃₃/dω   ForwardDiff %.6f   Enzyme %.6f\n", dA_dω, dA_dω′)
+
+using LinearAlgebra
+using ForwardDiff
+
+# 1. Differentiating wrt b: f(b) = sum(A \ b)
+function solve_b(b)
+    A = [1.0 1.0; 
+         1.0 3.0]
+    x = A \ b
+    return sum(x)
+end
+
+# 2. Differentiating wrt A: f(A_vec) = sum(A \ b)
+function solve_A(A_flat)
+    A = reshape(A_flat, 2, 2)
+    b = [1.0, 2.0]
+    x = A \ b
+    return sum(x)
+end
+
+b0 = [2.0, 3.0]
+A0_flat = [3.0, 1.0, 1.0, 3.0]
+
+grad_b = DI.gradient(solve_b, fwd, b0)
+grad_A = DI.gradient(solve_A, fwd, A0_flat)
+
+println("Gradient wrt b: ", grad_b)
+println("Gradient wrt A: ", grad_A)

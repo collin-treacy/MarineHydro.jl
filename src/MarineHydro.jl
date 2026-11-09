@@ -62,6 +62,7 @@ export AiryBC, FroudeKrylovForce, DiffractionForce
 
 include("solve.jl")
 export solve, solve_problem, solve_all_problems
+export check_array_nans
 
 include("ad_rules.jl")
 include("ad_rules_geometry.jl")

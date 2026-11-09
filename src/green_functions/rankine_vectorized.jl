@@ -27,8 +27,10 @@ const _BIRK_DKTOL = 1e-14
 # `abs(x)` and `sign(x)` zero Dual partials at x=0 (`sign(0)=0`). `ifelse` on the
 # primal keeps the Dual of `x`, which is the equivalent one-sided derivative of |x|
 # and matches signed-z AD through the coplanar (GZ=0) Rankine solid-angle term.
-@inline _abs_ad(x) = ifelse(x < zero(x), -x, x)
-@inline _sign_ad(x) = ifelse(x < zero(x), -one(x), one(x))
+# @inline _abs_ad(x) = ifelse(x < zero(x), -x, x)
+# @inline _sign_ad(x) = ifelse(x < zero(x), -one(x), one(x))
+@inline _abs_ad(x) = abs(x)
+@inline _sign_ad(x) = sign(x)
 
 @inline _primal_val(x) = x
 @inline _primal_val(x::ForwardDiff.Dual) = ForwardDiff.value(x)
@@ -239,22 +241,34 @@ end
 # edge), but the per-corner radii, per-edge log and the Δatan pair are computed
 # once instead of twice. This is the near-field hot path of `assemble_birk_rankine`.
 function birk_phi_and_velocity(x, y, z, local_corners)
+    purt = 1e-18
+
     sx = ntuple(k -> x - local_corners[k][1], 4)
     sy = ntuple(k -> y - local_corners[k][2], 4)
-    r = ntuple(k -> sqrt(sx[k]^2 + sy[k]^2 + z^2), 4)
+    r = ntuple(k -> sqrt(sx[k]^2 + sy[k]^2 + z^2 + purt^2) - purt, 4) # Check this
     e = ntuple(k -> sx[k]^2 + z^2, 4)
     h = ntuple(k -> sx[k] * sy[k], 4)
     contribs = ntuple(4) do k
         kn = mod1(k + 1, 4)
         dx = local_corners[kn][1] - local_corners[k][1]
+        check_array_nans("dx",dx)
         dy = local_corners[kn][2] - local_corners[k][2]
-        dk = hypot(dx, dy)
+        check_array_nans("dy",dy)
+        # dk = hypot(dx, dy) # The Nans start here!
+        dis_squared_raw = dx^2 + dy^2
+        dk = sqrt(dis_squared_raw + purt^2) - purt
+        check_array_nans("dk",dk)
         rsum = r[k] + r[kn]
+        check_array_nans("rsum",rsum)
         log_term = log((rsum - dk) / (rsum + dk))
-        lt_dk = log_term / dk
+        check_array_nans("log_term",log_term)
+        lt_dk = log_term / dk # somehow this has Nan deriv, while its arguments do not. dk must have a value of 0.
+        check_array_nans("lt_dk",lt_dk)
         Δatan = _atan_ratio(dy * e[k] - dx * h[k], dx * z * r[k]) -
                 _atan_ratio(dy * e[kn] - dx * h[kn], dx * z * r[kn])
+        check_array_nans("Δatan",Δatan)
         vzk = _inplane_atan(z, Δatan)
+        check_array_nans("vzk",vzk)
         φk = (sx[k] * dy - sy[k] * dx) * lt_dk + z * vzk
         zc = zero(φk)
         ifelse(dk <= _BIRK_DKTOL,
@@ -271,15 +285,30 @@ end
 
 # Source-panel frame is independent of the field point: assemble once per column.
 @inline function _vrankine_from_geom(point, source_point, source_radius, source_area, Tmat, qgc, local_corners)
+
+
+    # Inputs
+    check_array_nans("point",point)
+    check_array_nans("source_point",source_point)
+    check_array_nans("source_radius",source_radius)
+    check_array_nans("source_area",source_area)
+
+
     r̄ = point - source_point
     r = norm(r̄)
     if r > 7 * source_radius
+        # println("Inside if statement")
         return source_area / r, (r̄ / r^3) * source_area
     end
     PT = eltype(point)
     QT = eltype(qgc)
     field_local = Tmat' * (SVector{3,PT}(point[1], point[2], point[3]) - SVector{3,QT}(qgc[1], qgc[2], qgc[3]))
+
+    check_array_nans("field_local",field_local)
     φ_birk, v_local = birk_phi_and_velocity(field_local[1], field_local[2], field_local[3], local_corners)
+
+    check_array_nans("φ_birk",φ_birk)
+    check_array_nans("v_local",v_local)
     v_global = Tmat * v_local
     φ = -4π * φ_birk
     grad_wrt_source = 4π .* v_global
@@ -288,8 +317,17 @@ end
 
 function _vrankine_integral_and_gradient(element_1, element_2)
     Tmat, qgc, local_corners, _area = birk_panel_geometry(vertices(element_2))
-    return _vrankine_from_geom(center(element_1), center(element_2), radius(element_2),
+    check_array_nans("Tmat",Tmat)
+    check_array_nans("qgc",qgc)
+    check_array_nans("local_corners",local_corners)   
+
+    output = _vrankine_from_geom(center(element_1), center(element_2), radius(element_2),
         area(element_2), Tmat, qgc, local_corners)
+
+    check_array_nans("output[1]",output[1])
+    check_array_nans("output[2]",output[2])
+
+    return output
 end
 
 function greens(::Rankine, element_1, element_2, wavenumber=nothing)
@@ -302,6 +340,7 @@ end
 
 function integral(::Rankine, element_1, element_2, wavenumber=nothing)
     φ, _ = _vrankine_integral_and_gradient(element_1, element_2)
+    check_array_nans("vec rankine int",φ)
     return φ
 end
 

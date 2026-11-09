@@ -58,11 +58,73 @@ end
 # `solve(D, S, bc)`, dispatched on the first argument.
 function solve(problem::LinearPotentialFlowProblem, formulation::BEMFormulation=DirectBEM())
     omega, wavenumber = _problem_omega_k(problem)
+    check_array_nans("omega", omega)
     mesh, hull_mask = _mesh_including_lid(problem)
+    check_array_nans("mesh.normals", mesh.normals)
     bc = _pad_hull_bc(vec(compute_bc(problem)), hull_mask)
+    check_array_nans("bc", bc)
     S, D = assemble_matrices(formulation.greens, _assembly_mesh(mesh), wavenumber; direct=is_direct(formulation))
+    check_array_nans("S", S)
+    check_array_nans("D", D)
+    inspect_duals("S", S)
+    inspect_duals("D", D)
     return _finish_solve(problem, omega, wavenumber, S, D, mesh, hull_mask, bc, formulation)
 end
+
+
+has_nan_dual(x::Real) = isnan(x)
+has_nan_dual(d::ForwardDiff.Dual) = isnan(ForwardDiff.value(d)) || any(isnan, ForwardDiff.partials(d))
+has_nan_dual(c::Complex) = has_nan_dual(real(c)) || has_nan_dual(imag(c))
+
+# 2. Support for StaticArrays / AbstractArrays / Iterables
+has_nan_dual(A::AbstractArray) = any(has_nan_dual, A)
+has_nan_dual(t::Tuple) = any(has_nan_dual, t)
+
+# Check entire arrays
+function check_array_nans(name, X)
+    tf = any(has_nan_dual, X)
+    if tf
+        println("$name contains NaN duals: ", tf)
+    end
+end
+
+function check_elem_nans(x::Real)
+    return (isnan(x), false)
+end
+
+function check_elem_nans(x::ForwardDiff.Dual)
+    v_nan = isnan(ForwardDiff.value(x))
+    p_nan = any(isnan, ForwardDiff.partials(x))
+    return (v_nan, p_nan)
+end
+
+function check_elem_nans(x::Complex)
+    (v_r, p_r) = check_elem_nans(real(x))
+    (v_i, p_i) = check_elem_nans(imag(x))
+    return (v_r || v_i, p_r || p_i)
+end
+
+# Inspector function
+function inspect_duals(name, X)
+    println("--- Inspecting $name ---")
+    found_any = false
+    for idx in CartesianIndices(X)
+        elem = X[idx]
+        v_nan, p_nan = check_elem_nans(elem)
+        
+        if v_nan || p_nan
+            found_any = true
+            println("[$idx] Primal NaN? $v_nan | Partials NaN? $p_nan")
+            println("   -> Value: ", ForwardDiff.value(real(elem)) + ForwardDiff.value(imag(elem))*im)
+            println("   -> Full dual element: $elem")
+        end
+    end
+    if !found_any
+        println("   No NaNs detected in $name.")
+    end
+end
+
+
 
 function solve_problem(problem::LinearPotentialFlowProblem;
         formulation=nothing, direct::Bool=true, gf::String="Wu", greens_functions=nothing)

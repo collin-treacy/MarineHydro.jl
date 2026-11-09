@@ -67,6 +67,7 @@ function integral(::DelhommeauRankine, element_1, element_2, wavenumber=nothing)
             end
         end
     end
+    check_array_nans("rankine int",integral)
     return integral
 end
 

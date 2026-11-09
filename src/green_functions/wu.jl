@@ -6,7 +6,8 @@ struct GFWu <: GreensFunction end
 # see a stable type instead of a per-pair `do` closure.
 @inline function _wu_reduced_hh_vv(x, xi, wavenumber)
     dis_squared_raw = (x[1] - xi[1])^2 + (x[2] - xi[2])^2
-    purt = oftype(dis_squared_raw, 1e-18)
+    # purt = oftype(dis_squared_raw, 1e-18)
+    purt = 1e-18
     if dis_squared_raw == 0
         dis = sqrt(dis_squared_raw + purt^2) - purt
     else
@@ -77,7 +78,9 @@ function both_greens_and_gradient_greens(g::GFWu, element_1, element_2, wavenumb
 end
 
 @inline function integral(::GFWu, element_1, element_2, wavenumber)
-    _wu_greens(center(element_1), center(element_2), wavenumber) * area(element_2)
+    sol = _wu_greens(center(element_1), center(element_2), wavenumber) * area(element_2)
+    check_array_nans("wu int",sol)
+    return sol
 end
 
 @inline function integral_gradient(g::GFWu, element_1, element_2, wavenumber; with_respect_to_first_variable=false)

@@ -31,7 +31,9 @@ function gradient_greens(gf::_ReflectedRankine, element_1, element_2, wavenumber
 end
 
 function integral(gf::_ReflectedRankine, element_1, element_2, wavenumber=nothing)
-    return integral(_unreflected(gf), free_surface_symmetry(element_1), element_2)
+    inte = integral(_unreflected(gf), free_surface_symmetry(element_1), element_2)
+    check_array_nans("reflected rankine int",inte)
+    return inte
     # = integral(_unreflected(gf), element_1, free_surface_symmetry(element_2))
 end
 
