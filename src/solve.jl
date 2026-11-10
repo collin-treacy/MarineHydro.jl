@@ -66,8 +66,8 @@ function solve(problem::LinearPotentialFlowProblem, formulation::BEMFormulation=
     S, D = assemble_matrices(formulation.greens, _assembly_mesh(mesh), wavenumber; direct=is_direct(formulation))
     check_array_nans("S", S)
     check_array_nans("D", D)
-    inspect_duals("S", S)
-    inspect_duals("D", D)
+    # inspect_duals("S", S)
+    # inspect_duals("D", D)
     return _finish_solve(problem, omega, wavenumber, S, D, mesh, hull_mask, bc, formulation)
 end
 

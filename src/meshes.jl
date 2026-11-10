@@ -394,7 +394,7 @@ function axisymmetric_mesh(profile::Meshes.Rope, n_theta::Integer=72)
             for i in 0:(n_theta-1)
                 i3 = start_2 + i
                 i4 = start_2 + mod(i + 1, n_theta)
-                push!(connec, Meshes.connect((ir0, i3, i4), Triangle))
+                push!(connec, Meshes.connect((ir0, i3, i4), Meshes.Triangle))
             end
         elseif size_2 == 1
             ir0 = start_2
@@ -471,13 +471,17 @@ function Mesh(mesh::Meshes.SimpleMesh)
     faces_mat = zeros(Int, n_faces, 4)
     for i in 1:n_faces
         inds = Meshes.indices(connec[i])
-        inds_vec = collect(inds)
-        if length(inds)==3 # triangle element (repeat last vertex like cpt)
-            faces_mat[i, :] = vcat(inds_vec,inds_vec[3]) 
+        if length(inds) == 3
+            faces_mat[i, 1] = inds[1]
+            faces_mat[i, 2] = inds[2]
+            faces_mat[i, 3] = inds[3]
+            faces_mat[i, 4] = inds[3]
         else
-            faces_mat[i, :] = inds_vec
+            faces_mat[i, 1] = inds[1]
+            faces_mat[i, 2] = inds[2]
+            faces_mat[i, 3] = inds[3]
+            faces_mat[i, 4] = inds[4]
         end
-        # faces_mat[i, 1:length(inds)] .= inds
     end
 
     # get areas
@@ -498,7 +502,7 @@ function Mesh(mesh::Meshes.SimpleMesh)
 
         # compute center
         faces_vec = faces_mat[i,:]
-        if faces_vec[end]==-1 # this is a triangle element
+        if faces_vec[3] == faces_vec[4] # this is a triangle element
             a = vertices_mat[faces_vec[1],:]
             b = vertices_mat[faces_vec[2],:]
             c = vertices_mat[faces_vec[3],:]

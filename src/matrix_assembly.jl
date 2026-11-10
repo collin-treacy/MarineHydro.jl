@@ -457,8 +457,6 @@ function solve(D, S, bc; direct::Bool=true)
     b = bc isa AbstractMatrix ? bc : vec(bc)
     if direct
         rhs = _mulvec(S, b)
-        rhs_ = rhs[1:5]
-        println("rhs: $rhs_")
         ϕ = linsolve(D, _mulvec(S, b))
         sources = nothing
     else

@@ -6,6 +6,7 @@ authors = ["KapilKhanal <kk733@cornell.edu>"]
 [deps]
 CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
 ChainRulesCore = "d360d2e6-b24c-11e9-a2a3-2a2ae2dbcce4"
+Cthulhu = "f68482b8-f384-11e8-15f7-abe071a5a75f"
 DifferentiationInterface = "a0c0ee7d-e4b9-4e03-894e-1c5f64a51d63"
 DimensionalData = "0703355e-b756-11e9-17c0-8b28908087d0"
 Enzyme = "7da242da-08ed-463a-9acd-ee780be4f1d9"
@@ -23,6 +24,7 @@ Unitful = "1986cc42-f94f-5a68-af5c-568840ba703d"
 [compat]
 CairoMakie = "0.15"
 ChainRulesCore = "1.26.1"
+Cthulhu = "3.0.2"
 DifferentiationInterface = "0.7"
 DimensionalData = "0.30"
 Enzyme = "0.13"

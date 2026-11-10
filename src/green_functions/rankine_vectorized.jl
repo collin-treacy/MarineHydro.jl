@@ -241,7 +241,7 @@ end
 # edge), but the per-corner radii, per-edge log and the Δatan pair are computed
 # once instead of twice. This is the near-field hot path of `assemble_birk_rankine`.
 function birk_phi_and_velocity(x, y, z, local_corners)
-    purt = 1e-18
+    purt = 1e-9
 
     sx = ntuple(k -> x - local_corners[k][1], 4)
     sy = ntuple(k -> y - local_corners[k][2], 4)
@@ -256,13 +256,20 @@ function birk_phi_and_velocity(x, y, z, local_corners)
         check_array_nans("dy",dy)
         # dk = hypot(dx, dy) # The Nans start here!
         dis_squared_raw = dx^2 + dy^2
-        dk = sqrt(dis_squared_raw + purt^2) - purt
+        # dk = sqrt(dis_squared_raw + purt^2) - purt
+        dk = sqrt(dis_squared_raw + purt^2)
         check_array_nans("dk",dk)
         rsum = r[k] + r[kn]
         check_array_nans("rsum",rsum)
         log_term = log((rsum - dk) / (rsum + dk))
         check_array_nans("log_term",log_term)
         lt_dk = log_term / dk # somehow this has Nan deriv, while its arguments do not. dk must have a value of 0.
+        if log_term < 1e-7 && dk < 1e-7
+            println("0/0")
+            println("log_term: $log_term")
+            println("dk: $dk")
+            println("lt_dk: $lt_dk")
+        end        
         check_array_nans("lt_dk",lt_dk)
         Δatan = _atan_ratio(dy * e[k] - dx * h[k], dx * z * r[k]) -
                 _atan_ratio(dy * e[kn] - dx * h[kn], dx * z * r[kn])

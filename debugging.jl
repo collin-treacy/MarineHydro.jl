@@ -7,7 +7,7 @@ using Enzyme
 using Printf
 
 mesh_from_cpt = false
-static_arrays_mesh = false
+static_arrays_mesh = true
 
 if mesh_from_cpt
     cpt = pyimport("capytaine")
@@ -37,7 +37,7 @@ body(r) = FloatingBody(mesh_r_(r), [:Heave], "floatingbody")
 
 
 
-const formulation = DirectBEM()                # default: direct + Wu
+const formulation = DirectBEM((DelhommeauRankine(), RankineReflected(), GFWu()))               # default: direct + Wu
 const r0 = 1.0
 const ω0 = 1.03
 const β0 = 0.0
@@ -64,30 +64,3 @@ println("dA_dr: $dA_dr")
 # @printf("dA₃₃/dr   ForwardDiff %.6f   Enzyme %.6f\n", dA_dr, dA_dr′)
 # @printf("dA₃₃/dω   ForwardDiff %.6f   Enzyme %.6f\n", dA_dω, dA_dω′)
 
-using LinearAlgebra
-using ForwardDiff
-
-# 1. Differentiating wrt b: f(b) = sum(A \ b)
-function solve_b(b)
-    A = [1.0 1.0; 
-         1.0 3.0]
-    x = A \ b
-    return sum(x)
-end
-
-# 2. Differentiating wrt A: f(A_vec) = sum(A \ b)
-function solve_A(A_flat)
-    A = reshape(A_flat, 2, 2)
-    b = [1.0, 2.0]
-    x = A \ b
-    return sum(x)
-end
-
-b0 = [2.0, 3.0]
-A0_flat = [3.0, 1.0, 1.0, 3.0]
-
-grad_b = DI.gradient(solve_b, fwd, b0)
-grad_A = DI.gradient(solve_A, fwd, A0_flat)
-
-println("Gradient wrt b: ", grad_b)
-println("Gradient wrt A: ", grad_A)
