@@ -29,8 +29,9 @@ const _BIRK_DKTOL = 1e-14
 # and matches signed-z AD through the coplanar (GZ=0) Rankine solid-angle term.
 # @inline _abs_ad(x) = ifelse(x < zero(x), -x, x)
 # @inline _sign_ad(x) = ifelse(x < zero(x), -one(x), one(x))
-@inline _abs_ad(x) = abs(x)
-@inline _sign_ad(x) = sign(x)
+@inline _abs_ad(x) = sqrt(x^2 + (1e-8)^2)
+@inline _sign_ad(x) = x/_abs_ad(x)
+
 
 @inline _primal_val(x) = x
 @inline _primal_val(x::ForwardDiff.Dual) = ForwardDiff.value(x)
@@ -242,7 +243,6 @@ end
 # once instead of twice. This is the near-field hot path of `assemble_birk_rankine`.
 function birk_phi_and_velocity(x, y, z, local_corners)
     purt = 1e-9
-
     sx = ntuple(k -> x - local_corners[k][1], 4)
     sy = ntuple(k -> y - local_corners[k][2], 4)
     r = ntuple(k -> sqrt(sx[k]^2 + sy[k]^2 + z^2 + purt^2) - purt, 4) # Check this
@@ -256,20 +256,13 @@ function birk_phi_and_velocity(x, y, z, local_corners)
         check_array_nans("dy",dy)
         # dk = hypot(dx, dy) # The Nans start here!
         dis_squared_raw = dx^2 + dy^2
-        # dk = sqrt(dis_squared_raw + purt^2) - purt
-        dk = sqrt(dis_squared_raw + purt^2)
+        dk = sqrt(dis_squared_raw + purt^2) - purt
         check_array_nans("dk",dk)
         rsum = r[k] + r[kn]
         check_array_nans("rsum",rsum)
         log_term = log((rsum - dk) / (rsum + dk))
         check_array_nans("log_term",log_term)
-        lt_dk = log_term / dk # somehow this has Nan deriv, while its arguments do not. dk must have a value of 0.
-        if log_term < 1e-7 && dk < 1e-7
-            println("0/0")
-            println("log_term: $log_term")
-            println("dk: $dk")
-            println("lt_dk: $lt_dk")
-        end        
+        lt_dk = log_term / dk # somehow this has Nan deriv, while its arguments do not. dk must have a value of 0.   
         check_array_nans("lt_dk",lt_dk)
         Δatan = _atan_ratio(dy * e[k] - dx * h[k], dx * z * r[k]) -
                 _atan_ratio(dy * e[kn] - dx * h[kn], dx * z * r[kn])

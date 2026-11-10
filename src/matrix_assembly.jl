@@ -3,17 +3,13 @@
 # Public `assemble_matrices` dispatches on mesh / array / Green's-function types.
 
 function assemble_matrices_comprehension(green_functions, mesh, wavenumber; direct=true, all_normals=nothing, include_identity=true)
-
-    println("USING ASSEMBLE MATRICES COMPREHENSION")
     
     free_surface = 0.0
 
     if eltype(mesh.vertices)<: ForwardDiff.Dual
         T = eltype(mesh.vertices)
-        println("eltype(mesh.vertices)")
     else
         T = eltype(wavenumber)
-        println("eltype(wavenumber)")
     end
 
     S = @inbounds [-1/2τ̅ * Complex{T}(integral(green_functions, element(mesh, i), element(mesh, j), wavenumber)) for i in 1:mesh.nfaces, j in 1:mesh.nfaces]
@@ -76,7 +72,6 @@ end
 # Delhommeau `both_integral` S differs from `integral()` in the near field, so
 # S and D stay on those kernels. Rankine CPU assemble uses `assemble_birk_rankine`.
 function assemble_matrices_broadcasting(greens_functions, elements::AbstractVector, wavenumber; direct=true, include_identity=true, all_normals=nothing)
-    println("USING ASSEMBLE MATRICES BROADCASTING")
     co_elements = reshape(elements, (1, length(elements)))
     S_kernel(e1, e2) = integral(greens_functions, e1, e2, wavenumber)
     S_matrix = (-1 / 4π) .* S_kernel.(elements, co_elements)
@@ -404,13 +399,10 @@ _mulvec(S, bc) = S * bc
 # as Zygote; adjoint `y'`). GPU arrays use `gpu_linsolve`.
 function linsolve(A, b)
     if eltype(real(A)) <: ForwardDiff.Dual
-        println("Using reg solve")
         return A \ b
-    elseif A isa Array
-        println("Using _linearsolve")        
+    elseif A isa Array    
         return _linearsolve(A, b)
     else
-        println("Using _gpu_linsolve")   
         return gpu_linsolve(A, b)
     end
 end
@@ -456,7 +448,6 @@ function solve(D, S, bc; direct::Bool=true)
     # and LinearSolve's `u0` see the correct shape; only flatten other shapes.
     b = bc isa AbstractMatrix ? bc : vec(bc)
     if direct
-        rhs = _mulvec(S, b)
         ϕ = linsolve(D, _mulvec(S, b))
         sources = nothing
     else

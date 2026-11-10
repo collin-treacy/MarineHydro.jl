@@ -417,6 +417,32 @@ function axisymmetric_mesh(profile::Meshes.Rope, n_theta::Integer=72)
     return Meshes.SimpleMesh(points, connec)
 end
 
+function axisymmetric_mesh(
+        r_vals::Vector = [1.0, 1.0, 1.0],
+        z_vals::Vector = [1e-3, -0.5, -1.0],
+        n_theta = 72,
+        show_plot=false
+        )
+
+    profile = axisymmetric_profile(r_vals,z_vals)
+    mesh = axisymmetric_mesh(profile, n_theta)
+    MHmesh = Mesh(mesh)
+
+    if show_plot
+        plot_mesh(mesh, profile)
+    end
+        
+    return MHmesh
+end
+
+function axisymmetric_profile(
+    r_vals::Vector = [1.0, 1.0, 1.0],
+    z_vals::Vector = [1e-3, -0.5, -1.0]
+)
+    points = [Meshes.Point(r, z) for (r, z) in zip(r_vals, z_vals)]
+    return Meshes.Rope(points)
+end
+
 function wavebot_profile(
     cylinder_height=0.16m,
     frustum_height=0.37m,
