@@ -256,7 +256,8 @@ function birk_phi_and_velocity(x, y, z, local_corners)
         check_array_nans("dy",dy)
         # dk = hypot(dx, dy) # The Nans start here!
         dis_squared_raw = dx^2 + dy^2
-        dk = sqrt(dis_squared_raw + purt^2) - purt
+        # dk = sqrt(dis_squared_raw + purt^2) - purt
+        dk = sqrt(dis_squared_raw + purt^2)
         check_array_nans("dk",dk)
         rsum = r[k] + r[kn]
         check_array_nans("rsum",rsum)
@@ -287,7 +288,7 @@ end
 @inline function _vrankine_from_geom(point, source_point, source_radius, source_area, Tmat, qgc, local_corners)
 
 
-    # Inputs
+    # # Inputs
     check_array_nans("point",point)
     check_array_nans("source_point",source_point)
     check_array_nans("source_radius",source_radius)
