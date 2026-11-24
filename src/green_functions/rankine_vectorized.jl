@@ -27,10 +27,8 @@ const _BIRK_DKTOL = 1e-14
 # `abs(x)` and `sign(x)` zero Dual partials at x=0 (`sign(0)=0`). `ifelse` on the
 # primal keeps the Dual of `x`, which is the equivalent one-sided derivative of |x|
 # and matches signed-z AD through the coplanar (GZ=0) Rankine solid-angle term.
-# @inline _abs_ad(x) = ifelse(x < zero(x), -x, x)
-# @inline _sign_ad(x) = ifelse(x < zero(x), -one(x), one(x))
-@inline _abs_ad(x) = sqrt(x^2 + (1e-8)^2)
-@inline _sign_ad(x) = x/_abs_ad(x)
+@inline _abs_ad(x) = ifelse(x < zero(x), -x, x)
+@inline _sign_ad(x) = ifelse(x < zero(x), -one(x), one(x))
 
 
 @inline _primal_val(x) = x
@@ -54,6 +52,31 @@ end
         return _zero_primal_keep_tangent(Δatan)
     end
     return Δatan
+end
+
+# A triangle is stored as a quad with a repeated corner, so one edge has dx = dy = 0.
+# On that edge `log_term / dk` is 0/0 and both `_atan_ratio` calls are atan(0, 0),
+# whose derivative is NaN. The callers' `ifelse` discards the primal, but ifelse
+# evaluates both branches, so AD still sees 0 * NaN = NaN. For a degenerate edge,
+# `_birk_edge` and `_birk_atan` evaluate a finite stand-in edge instead (dk = 1,
+# rsum = 3, atan(0, 1)); the callers then select zeros for it using `degenerate`.
+@inline function _birk_edge(dx, dy, rk, rk1)
+    d2 = dx^2 + dy^2
+    degenerate = d2 <= _BIRK_DKTOL^2
+    dk = sqrt(ifelse(degenerate, one(d2), d2))
+    rsum = ifelse(degenerate, 3 * one(rk + rk1), rk + rk1)
+    log_term = log((rsum - dk) / (rsum + dk))
+    return degenerate, dk, log_term
+end
+
+# atan(0, 0) also occurs on a normal edge when the field point is in the panel plane
+# (z = 0) and in line with a corner (x = xk): then e = h = 0, so num = den = 0. Use the
+# same stand-in there. Its zero tangent matches `velocity_hessian`, whose in-plane
+# x/y terms (hzx, hzy) are proportional to z; the z tangent is dropped too, which is
+# exact while the field point stays in the panel plane (self panels, flat bottoms).
+@inline function _birk_atan(degenerate, num, den)
+    stand_in = degenerate | (iszero(_primal_val(num)) & iszero(_primal_val(den)))
+    return _atan_ratio(ifelse(stand_in, zero(num), num), ifelse(stand_in, one(den), den))
 end
 
 # Delhommeau near-field: same coplanar primal (AT=0 when |GZ| is tiny) with Duals
@@ -146,22 +169,21 @@ function velocity_potential(x, y, z, local_corners)
         xk1, yk1 = local_corners[mod1(k + 1, 4)][1], local_corners[mod1(k + 1, 4)][2]
         dx = xk1 - xk
         dy = yk1 - yk
-        dk = hypot(dx, dy)
         rk = sqrt((x - xk)^2 + (y - yk)^2 + z^2)
         rk1 = sqrt((x - xk1)^2 + (y - yk1)^2 + z^2)
         ek = (x - xk)^2 + z^2
         ek1 = (x - xk1)^2 + z^2
         hk = (x - xk) * (y - yk)
         hk1 = (x - xk1) * (y - yk1)
-        log_term = log((rk + rk1 - dk) / (rk + rk1 + dk))
+        degenerate, dk, log_term = _birk_edge(dx, dy, rk, rk1)
         log_part = ((x - xk) * dy - (y - yk) * dx) / dk * log_term
         # Rewrite (mk*ek - hk)/(z*rk) as (dy*ek - dx*hk)/(dx*z*rk) to allow vertical edges.
         # Signed z * Δatan; `_inplane_atan` zeros the primal at z=0 without killing Duals.
         Δatan = _inplane_atan(z,
-            _atan_ratio(dy * ek - dx * hk, dx * z * rk) -
-            _atan_ratio(dy * ek1 - dx * hk1, dx * z * rk1))
+            _birk_atan(degenerate, dy * ek - dx * hk, dx * z * rk) -
+            _birk_atan(degenerate, dy * ek1 - dx * hk1, dx * z * rk1))
         atan_part = z * Δatan
-        ifelse(dk <= _BIRK_DKTOL, zero(x), -(log_part + atan_part) / 4π)
+        ifelse(degenerate, zero(x), -(log_part + atan_part) / 4π)
     end
     return sum(contribs)
 end
@@ -174,20 +196,19 @@ function velocity_derivatives(x, y, z, local_corners)
         xk1, yk1 = local_corners[mod1(k + 1, 4)][1], local_corners[mod1(k + 1, 4)][2]
         dx = xk1 - xk
         dy = yk1 - yk
-        dk = hypot(dx, dy)
         rk = sqrt((x - xk)^2 + (y - yk)^2 + z^2)
         rk1 = sqrt((x - xk1)^2 + (y - yk1)^2 + z^2)
         ek = (x - xk)^2 + z^2
         ek1 = (x - xk1)^2 + z^2
         hk = (x - xk) * (y - yk)
         hk1 = (x - xk1) * (y - yk1)
-        log_term = log((rk + rk1 - dk) / (rk + rk1 + dk))
+        degenerate, dk, log_term = _birk_edge(dx, dy, rk, rk1)
         vx = (dy / dk) * log_term
         vy = (-dx / dk) * log_term
         vz = _inplane_atan(z,
-            _atan_ratio(dy * ek - dx * hk, dx * z * rk) -
-            _atan_ratio(dy * ek1 - dx * hk1, dx * z * rk1))
-        ifelse(dk <= _BIRK_DKTOL, zero(SVector(x, x, x)), SVector(vx, vy, vz))
+            _birk_atan(degenerate, dy * ek - dx * hk, dx * z * rk) -
+            _birk_atan(degenerate, dy * ek1 - dx * hk1, dx * z * rk1))
+        ifelse(degenerate, zero(SVector(x, x, x)), SVector(vx, vy, vz))
     end
     return (-1 / 4π) .* sum(contribs)
 end
@@ -242,37 +263,23 @@ end
 # edge), but the per-corner radii, per-edge log and the Δatan pair are computed
 # once instead of twice. This is the near-field hot path of `assemble_birk_rankine`.
 function birk_phi_and_velocity(x, y, z, local_corners)
-    purt = 1e-9
     sx = ntuple(k -> x - local_corners[k][1], 4)
     sy = ntuple(k -> y - local_corners[k][2], 4)
-    r = ntuple(k -> sqrt(sx[k]^2 + sy[k]^2 + z^2 + purt^2) - purt, 4) # Check this
+    r = ntuple(k -> sqrt(sx[k]^2 + sy[k]^2 + z^2), 4)
     e = ntuple(k -> sx[k]^2 + z^2, 4)
     h = ntuple(k -> sx[k] * sy[k], 4)
     contribs = ntuple(4) do k
         kn = mod1(k + 1, 4)
         dx = local_corners[kn][1] - local_corners[k][1]
-        check_array_nans("dx",dx)
         dy = local_corners[kn][2] - local_corners[k][2]
-        check_array_nans("dy",dy)
-        # dk = hypot(dx, dy) # The Nans start here!
-        dis_squared_raw = dx^2 + dy^2
-        # dk = sqrt(dis_squared_raw + purt^2) - purt
-        dk = sqrt(dis_squared_raw + purt^2)
-        check_array_nans("dk",dk)
-        rsum = r[k] + r[kn]
-        check_array_nans("rsum",rsum)
-        log_term = log((rsum - dk) / (rsum + dk))
-        check_array_nans("log_term",log_term)
-        lt_dk = log_term / dk # somehow this has Nan deriv, while its arguments do not. dk must have a value of 0.   
-        check_array_nans("lt_dk",lt_dk)
-        Δatan = _atan_ratio(dy * e[k] - dx * h[k], dx * z * r[k]) -
-                _atan_ratio(dy * e[kn] - dx * h[kn], dx * z * r[kn])
-        check_array_nans("Δatan",Δatan)
+        degenerate, dk, log_term = _birk_edge(dx, dy, r[k], r[kn])
+        lt_dk = log_term / dk
+        Δatan = _birk_atan(degenerate, dy * e[k] - dx * h[k], dx * z * r[k]) -
+                _birk_atan(degenerate, dy * e[kn] - dx * h[kn], dx * z * r[kn])
         vzk = _inplane_atan(z, Δatan)
-        check_array_nans("vzk",vzk)
         φk = (sx[k] * dy - sy[k] * dx) * lt_dk + z * vzk
         zc = zero(φk)
-        ifelse(dk <= _BIRK_DKTOL,
+        ifelse(degenerate,
             SVector(zc, zc, zc, zc),
             SVector(φk, dy * lt_dk, -dx * lt_dk, vzk))
     end
@@ -288,13 +295,6 @@ end
 @inline function _vrankine_from_geom(point, source_point, source_radius, source_area, Tmat, qgc, local_corners)
 
 
-    # # Inputs
-    check_array_nans("point",point)
-    check_array_nans("source_point",source_point)
-    check_array_nans("source_radius",source_radius)
-    check_array_nans("source_area",source_area)
-
-
     r̄ = point - source_point
     r = norm(r̄)
     if r > 7 * source_radius
@@ -305,11 +305,9 @@ end
     QT = eltype(qgc)
     field_local = Tmat' * (SVector{3,PT}(point[1], point[2], point[3]) - SVector{3,QT}(qgc[1], qgc[2], qgc[3]))
 
-    check_array_nans("field_local",field_local)
     φ_birk, v_local = birk_phi_and_velocity(field_local[1], field_local[2], field_local[3], local_corners)
 
-    check_array_nans("φ_birk",φ_birk)
-    check_array_nans("v_local",v_local)
+
     v_global = Tmat * v_local
     φ = -4π * φ_birk
     grad_wrt_source = 4π .* v_global
@@ -318,15 +316,10 @@ end
 
 function _vrankine_integral_and_gradient(element_1, element_2)
     Tmat, qgc, local_corners, _area = birk_panel_geometry(vertices(element_2))
-    check_array_nans("Tmat",Tmat)
-    check_array_nans("qgc",qgc)
-    check_array_nans("local_corners",local_corners)   
+
 
     output = _vrankine_from_geom(center(element_1), center(element_2), radius(element_2),
         area(element_2), Tmat, qgc, local_corners)
-
-    check_array_nans("output[1]",output[1])
-    check_array_nans("output[2]",output[2])
 
     return output
 end
@@ -341,7 +334,6 @@ end
 
 function integral(::Rankine, element_1, element_2, wavenumber=nothing)
     φ, _ = _vrankine_integral_and_gradient(element_1, element_2)
-    check_array_nans("vec rankine int",φ)
     return φ
 end
 

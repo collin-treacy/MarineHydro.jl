@@ -58,16 +58,18 @@ function integral(::DelhommeauRankine, element_1, element_2, wavenumber=nothing)
                     2 * _abs_ad(GZ) * (RR[index_next_vertex] + RR[index_vertex])
                 AT = _delhommeau_atan(ANT, DNT, GZ, source_radius)
                 integral -= 2 * _abs_ad(GZ) * AT
-                if abs(GY) > 1e-5
-                    ANL = RR[index_next_vertex] + RR[index_vertex] + segment_length
-                    DNL = RR[index_next_vertex] + RR[index_vertex] - segment_length
+                ANL = RR[index_next_vertex] + RR[index_vertex] + segment_length
+                DNL = RR[index_next_vertex] + RR[index_vertex] - segment_length
+                # GY * ALDEN is smooth through GY = 0, so it is only skipped where the
+                # log is singular (field point on the edge itself, DNL = 0). Skipping it
+                # for |GY| < 1e-5 made the primal flat there and AD lost GY' * ALDEN.
+                if DNL > 1e-10 * ANL
                     ALDEN = log(ANL / DNL)
                     integral += GY * ALDEN
                 end
             end
         end
     end
-    check_array_nans("rankine int",integral)
     return integral
 end
 
@@ -114,7 +116,7 @@ function both_integral_and_integral_gradient(::DelhommeauRankine, element_1, ele
 
                 # Same S as `integral(::DelhommeauRankine)`: solid-angle atan plus log term.
                 integral -= 2 * _abs_ad(GZ) * AT
-                if abs(GY) > 1e-5
+                if DNL > 1e-10 * ANL
                     integral += GY * ALDEN
                 end
                 integral_gradient = integral_gradient .-

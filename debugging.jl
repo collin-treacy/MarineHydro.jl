@@ -6,10 +6,8 @@ import DifferentiationInterface as DI
 using Enzyme
 using Printf
 
-Enzyme.Compiler.VERBOSE_ERRORS[] = true
-
 mesh_from_cpt = false
-static_arrays_mesh = false
+static_arrays_mesh = true
 
 if mesh_from_cpt
     cpt = pyimport("capytaine")
@@ -39,7 +37,7 @@ body(r) = FloatingBody(mesh_r_(r), [:Heave], "floatingbody")
 
 
 
-const formulation = DirectBEM((Rankine(), RankineReflected(), GFWu()))                 # default: direct + Wu
+const formulation = IndirectBEM((Rankine(), RankineReflected(), GFWu()))                 # default: direct + Wu
 const r0 = 1.0
 const ω0 = 1.03
 const β0 = 0.0
@@ -56,16 +54,11 @@ sol = radiation_solve(r0, ω0)
 added_mass_r(r) = added_mass(radiation_solve(r, ω0)).Heave
 added_mass_ω(ω) = added_mass(radiation_solve(r0, ω)).Heave
 
-# t_r_fwd = @elapsed dA_dr  = DI.derivative(added_mass_r, fwd, r0)
+t_r_fwd = @elapsed dA_dr  = DI.derivative(added_mass_r, fwd, r0)
 t_r_rev = @elapsed dA_dr′ = DI.derivative(added_mass_r, rev, r0)   # first Enzyme call compiles
-# t_ω_fwd = @elapsed dA_dω  = DI.derivative(added_mass_ω, fwd, ω0)
+t_ω_fwd = @elapsed dA_dω  = DI.derivative(added_mass_ω, fwd, ω0)
 t_ω_rev = @elapsed dA_dω′ = DI.derivative(added_mass_ω, rev, ω0)
 
-
-t_r_fwd = 0
-dA_dr = 0
-t_ω_fwd = 0
-dA_dω = 0
 
 
 @printf("dA₃₃/dr   ForwardDiff %.6f (time=%.3f s)  Enzyme %.6f (time=%.3f s)\n", dA_dr, t_r_fwd, dA_dr′, t_r_rev)

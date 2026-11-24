@@ -57,29 +57,27 @@ function both_greens_and_gradient_greens(g::GFWu, element_1, element_2, wavenumb
     GF, dGF_dhh, dGF_dvv = _wu_wave_term_and_derivs(hh, vv)
     k = wavenumber
     if with_respect_to_first_variable
-        if abs(hh) > 1e-6
-            dr_dx1 = k^2 / hh * (x[1] - xi[1])
-            dr_dx2 = k^2 / hh * (x[2] - xi[2])
-        else
-            dr_dx1 = zero(x[1])
-            dr_dx2 = zero(x[2])
-        end
+        dr_dx1, dr_dx2 = _wu_dr_dx(hh, k, x[1] - xi[1], x[2] - xi[2])
         return k * GF, k * (zero(x) .+ (dr_dx1 * dGF_dhh, dr_dx2 * dGF_dhh, k * dGF_dvv))
     else
-        if abs(hh) > 1e-6
-            dr_dxi1 = k^2 / hh * (xi[1] - x[1])
-            dr_dxi2 = k^2 / hh * (xi[2] - x[2])
-        else
-            dr_dxi1 = zero(x[1])
-            dr_dxi2 = zero(x[2])
-        end
+        dr_dxi1, dr_dxi2 = _wu_dr_dx(hh, k, xi[1] - x[1], xi[2] - x[2])
         return k * GF, k * (zero(x) .+ (dr_dxi1 * dGF_dhh, dr_dxi2 * dGF_dhh, k * dGF_dvv))
     end
 end
 
+# Horizontal gradient factor k^2/hh * dx, zero when the panels share x,y (hh ≈ 0).
+# The division never sees hh = 0: an `if` around `k^2 / hh` can be compiled into a
+# select that evaluates both branches, and Enzyme reverse then multiplies a zero
+# adjoint by Inf * 0 = NaN.
+@inline function _wu_dr_dx(hh, k, dx1, dx2)
+    far = abs(hh) > 1e-6
+    hh_safe = ifelse(far, hh, one(hh))
+    z = zero(hh)
+    return ifelse(far, k^2 / hh_safe * dx1, z), ifelse(far, k^2 / hh_safe * dx2, z)
+end
+
 @inline function integral(::GFWu, element_1, element_2, wavenumber)
     sol = _wu_greens(center(element_1), center(element_2), wavenumber) * area(element_2)
-    check_array_nans("wu int",sol)
     return sol
 end
 
@@ -115,14 +113,7 @@ end
 @inline function _wu_sd(x, xi, n, area2, k, dx1, dx2)
     hh, vv = _wu_reduced_hh_vv(x, xi, k)
     GF, dGF_dhh, dGF_dvv = _wu_wave_term_and_derivs(hh, vv)
-    if abs(hh) > 1e-6
-        dr1 = k^2 / hh * dx1
-        dr2 = k^2 / hh * dx2
-    else
-        z = zero(hh)
-        dr1 = z
-        dr2 = z
-    end
+    dr1, dr2 = _wu_dr_dx(hh, k, dx1, dx2)
     g = k * (zero(x) .+ (dr1 * dGF_dhh, dr2 * dGF_dhh, k * dGF_dvv))
     s = (k * GF) * area2
     d = (n' * g) * area2

@@ -510,9 +510,6 @@ function Mesh(mesh::Meshes.SimpleMesh)
         end
     end
 
-    # get areas
-    areas_vec = Vector{T}(ustrip.(Meshes.area.(mesh)))
-
     # get nvertices
     nvertices = length(vertices_mat[:,1])
 
@@ -523,6 +520,9 @@ function Mesh(mesh::Meshes.SimpleMesh)
     center_mat  = zeros(T, nfaces, 3)
     normals_mat = zeros(T, nfaces, 3)
     radii_vec   = zeros(T, nfaces)
+    # areas are computed from vertices_mat rather than Meshes.area.(mesh): broadcasting
+    # over a mixed triangle/quad mesh collects a Union-typed vector, which Enzyme rejects
+    areas_vec   = zeros(T, nfaces)
 
     for i in 1:nfaces
 
@@ -533,6 +533,7 @@ function Mesh(mesh::Meshes.SimpleMesh)
             b = vertices_mat[faces_vec[2],:]
             c = vertices_mat[faces_vec[3],:]
             center_vec = (a+b+c)/3
+            areas_vec[i] = 0.5 * norm(cross(b-a, c-a))
         else # this is a quadrilateral element
             a = vertices_mat[faces_vec[1],:]
             b = vertices_mat[faces_vec[2],:]
@@ -543,6 +544,7 @@ function Mesh(mesh::Meshes.SimpleMesh)
             c1 = (a+b+c)/3
             c2 = (a+c+d)/3
             center_vec = (c1*area1 + c2*area2) / (area1 + area2)
+            areas_vec[i] = area1 + area2
         end
         center_mat[i,:] = center_vec
 
