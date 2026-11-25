@@ -13,7 +13,8 @@ Reverse-mode rules for Zygote (ChainRules) and Enzyme. Primals stay in
 module ReverseAD
 
 using ..MarineHydro: velocity_potential, velocity_derivatives, velocity_hessian,
-    birk_phi_and_velocity, _linearsolve, _mulvec, gpu_linsolve, _backend_ldiv
+    birk_phi_and_velocity, _linearsolve, _mulvec, gpu_linsolve, _backend_ldiv,
+    _zero_primal_keep_tangent
 using ChainRulesCore
 using ForwardDiff
 using LinearAlgebra
@@ -70,6 +71,47 @@ end
 _enzyme_zeros_like(x, config) =
     EnzymeRules.width(config) == 1 ? zero(x) :
     ntuple(_ -> zero(x), Val(EnzymeRules.width(config)))
+
+# ---------------------------------------------------------------------------
+# Coplanar solid angle: _zero_primal_keep_tangent(x) has value 0, derivative 1
+# ---------------------------------------------------------------------------
+# The primal `x - oftype(x, _primal_val(x))` only keeps the tangent for
+# ForwardDiff Duals. Enzyme sees a plain Float64, i.e. `x - x`, and returns a
+# zero derivative, which drops the coplanar (GZ = 0 / z = 0) solid-angle term
+# of the Delhommeau and Birk Rankine integrals. This rule gives Enzyme the
+# intended pair: value 0, adjoint passed through unchanged.
+
+function EnzymeRules.augmented_primal(
+    config::EnzymeRules.RevConfig,
+    ::Const{typeof(_zero_primal_keep_tangent)},
+    ::Type{RT},
+    x::Annotation,
+) where {RT}
+    res = zero(x.val)
+    retres = EnzymeRules.needs_primal(config) ? res : nothing
+    dres = EnzymeRules.needs_shadow(config) ? _enzyme_zeros_like(res, config) : nothing
+    return EnzymeRules.augmented_rule_return_type(config, RT)(retres, dres, nothing)
+end
+
+function EnzymeRules.reverse(
+    ::EnzymeRules.RevConfig,
+    ::Const{typeof(_zero_primal_keep_tangent)},
+    dret::Active,
+    tape,
+    x::Annotation,
+)
+    return (_enz_arg_tangent(x, dret.val),)
+end
+
+function EnzymeRules.reverse(
+    ::EnzymeRules.RevConfig,
+    ::Const{typeof(_zero_primal_keep_tangent)},
+    ::Type{<:Const},
+    ::Any,
+    ::Annotation,
+)
+    return (nothing,)
+end
 
 # ---------------------------------------------------------------------------
 # Birk velocity_potential  (eq. 46)
